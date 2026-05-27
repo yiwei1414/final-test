@@ -26,7 +26,7 @@ let feedbackMsg = "";
 
 // --- 第二關：體能燃脂關專用變數 ---
 let squatCounter = 0;      
-let targetSquats = 3;      
+let targetSquats = 5;    
 let baseNoseY = -1;        
 let hasSquatted = false;   
 let squatTimer = 15;       
@@ -231,7 +231,7 @@ function drawGameUI(vx, vy, vw, vh) {
     stroke(0); strokeWeight(6); fill(255, 100, 100); textSize(42);
     text("🚨 警告！突發卡路里熱量代價體驗 🚨", width / 2, height / 2 - 120);
     noStroke(); fill(255); textSize(24);
-    text("你剛剛不小心喝了一杯「珍珠奶茶」，累積了 700 大卡！\n這相當於吃下了 12 顆方糖的熱量！\n\n請在 15 秒內完成 3 次標準深蹲來消滅卡路里！\n\n如果時間內未完成，就需要重新挑戰喔！\n\n點擊螢幕或雙手合十開始「AI 身高偵測」！", width / 2, height / 2 + 40);
+    text("你剛剛不小心喝了一杯「珍珠奶茶」，累積了 700 大卡！\n這相當於吃下了 12 顆方糖的熱量！\n\n請在 15 秒內完成 5 次標準深蹲來消滅卡路里！\n\n如果時間內未完成，就需要重新挑戰喔！\n\n點擊螢幕或雙手合十開始「AI 身高偵測」！", width / 2, height / 2 + 40);
 
   } else if (gameState === "CALIBRATE") {
     fill(0, 0, 0, 160); noStroke(); rect(vx, vy, vw, vh, 10);
@@ -265,7 +265,7 @@ function drawGameUI(vx, vy, vw, vh) {
     strokeWeight(3); fill(255); textSize(26);
     text(`第一關食物分類：獲得 ${score} / ${questions.length} 分`, width/2, height/2 - 130);
     fill(100, 255, 100);
-    text(`第二關燃脂挑戰：完成 3 次深蹲，成功擊退熱量怪獸！`, width/2, height/2 - 90);
+    text(`第二關燃脂挑戰：完成 5 次深蹲，成功擊退熱量怪獸！`, width/2, height/2 - 90);
     
     // --- 【核心精華結語】知識點總結 ---
     let boxW = width * 0.6;
