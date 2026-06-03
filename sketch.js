@@ -369,10 +369,10 @@ function drawGameUI(vx, vy, vw, vh) {
 
   } else if (gameState === "LEVEL3_INTRO") {
     fill(0, 0, 0, 200); rect(0, 0, width, height);
-    stroke(0); strokeWeight(6); fill(0, 255, 150); textSize(40);
-    text("第三關：均衡晚餐大捕手", width / 2, height / 2 - 120);
+    stroke(0); strokeWeight(6); fill(0, 255, 150); textSize(44);
+    text("第三關：健康餐盤大挑戰", width / 2, height / 2 - 120);
     noStroke(); fill(255); textSize(24);
-    text("最後一關！請用你的雙手去「接住」掉落的食材。\n你需要調配出一份完美的均衡晚餐：\n\n✅ 目標：2 份蔬菜 🥦 + 2 份米飯 🍚 + 1 份肉類 🍗\n⚠️ 警告：接到垃圾食物 🍟 會扣掉 5 秒鐘！\n\n點擊螢幕 或 雙手合十 開始一分鐘挑戰！", width / 2, height / 2 + 60);
+    text("最後一關！請伸出你的手，並「握緊拳頭」來顯示餐盤。\n只有當餐盤出現時，才能成功接到掉落的食材！\n\n你要調配出規定的均衡晚餐組合：\n✅ 規定：2 份蔬菜 🥦 + 2 份米飯 🍚 + 1 份肉類 🍗\n⚠️ 警告：接到垃圾食物 🍩 會扣掉 5 秒鐘！\n\n點擊螢幕 或 雙手合十 開始挑戰！", width / 2, height / 2 + 60);
 
   } else if (gameState === "LEVEL3_PLAYING") {
     // 頂部進度條與計時
