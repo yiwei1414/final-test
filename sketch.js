@@ -312,6 +312,9 @@ function drawGameUI(vx, vy, vw, vh) {
     text("小小營養師", width / 2, height / 2 - 80);
     textSize(45); fill(255); text("健康餐盤大作戰", width / 2, height / 2);
     noStroke(); fill(200); textSize(24); text("點擊螢幕或雙手合十開啟冒險", width / 2, height / 2 + 100);
+
+    textSize(20); fill(150);
+    text("411136541江奕葳", width / 2, height - 30);
   
   } else if (gameState === "SUMMARY") {
     // --- 第一關總結表畫面 ---
