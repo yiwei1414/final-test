@@ -20,8 +20,9 @@ let lives = 3; // 生命值：三個愛心
 
 // 遊戲狀態機：
 // COVER (封面), INTRO (第一關介紹), PLAYING (第一關答題), FEEDBACK (第一關詳解),
-// INTRO2 (第二關介紹), CALIBRATE (第二關身高偵測校正), SQUAT (第二關深蹲中), END (大結局與專業結語)
-let gameState = "COVER"; 
+// SUMMARY (第一關總結), INTRO2 (第二關介紹), CALIBRATE (第二關身高偵測校正), SQUAT (第二關深蹲中), 
+// LEVEL3_INTRO (第三關介紹), LEVEL3_PLAYING (第三關抓食材), END (大結局與專業結語)
+let gameState = "COVER";
 let feedbackMsg = "";
 
 // --- 第二關：體能燃脂關專用變數 ---
@@ -32,6 +33,17 @@ let hasSquatted = false;
 let squatTimer = 15;       
 let lastTimeCheck = 0;     
 let calibrationTimer = 120;
+
+// --- 第三關：均衡晚餐大作戰專用變數 ---
+let level3Rice = 0, level3Veg = 0, level3Meat = 0;
+let level3Timer = 60;
+let level3Items = [];
+let spawnRate = 45; // 每幾幀產生一個物體
+let level3GoalReached = false;
+// 新增：存儲轉換後的左右手座標，供繪製餐盤使用
+let handLX, handLY, handRX, handRY;
+// 新增：紀錄目前哪隻手握拳 (null, 'left', 'right')
+let activeHand = null;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -120,8 +132,16 @@ function handleGestures() {
     if (d < 70) { 
       if (gameState === "COVER") { gameState = "INTRO"; triggerCooldown(1500); return; }
       else if (gameState === "INTRO") { gameState = "PLAYING"; triggerCooldown(1500); return; }
+      else if (gameState === "SUMMARY") { gameState = "INTRO2"; triggerCooldown(1500); return; }
       else if (gameState === "FEEDBACK") { nextQuestion(); triggerCooldown(1500); return; }
       else if (gameState === "INTRO2") { gameState = "CALIBRATE"; calibrationTimer = 120; triggerCooldown(1500); return; }
+      else if (gameState === "LEVEL3_INTRO") { 
+        gameState = "LEVEL3_PLAYING"; 
+        level3Timer = 60; lastTimeCheck = millis(); 
+        level3Rice = level3Veg = level3Meat = 0;
+        level3Items = [];
+        triggerCooldown(1500); return; 
+      }
     }
 
     // ----------------------------------------------------
@@ -130,6 +150,64 @@ function handleGestures() {
     if (gameState === "PLAYING") {
       if (rw.y < nose.y - 40) { checkAnswer("O"); triggerCooldown(); } 
       else if (lw.y < nose.y - 40) { checkAnswer("X"); triggerCooldown(); }
+    }
+
+    // ----------------------------------------------------
+    // 【第三關：手部位置偵測與食材碰撞判定】
+    // ----------------------------------------------------
+    if (gameState === "LEVEL3_PLAYING") {
+      // 計算影像在畫布上的縮放比例
+      let videoW = width * 0.75;
+      let videoH = height * 0.75;
+      let offX = (width - videoW) / 2;
+      let offY = (height - videoH) / 2 + 20;
+
+      // 將手腕座標映射到畫布實際座標 (考慮鏡像與縮放)
+      handLX = offX + videoW - (lw.x / 640 * videoW);
+      handRX = offX + videoW - (rw.x / 640 * videoW);
+      handLY = offY + (lw.y / 480 * videoH);
+      handRY = offY + (rw.y / 480 * videoH);
+      let handY = offY + (nose.y / 480 * videoH); // 使用鼻子高度代表手部操作區，或直接用手腕 y
+
+      // --- 偵測哪隻手握拳 ---
+      const fistThreshold = 80;
+      let isLeftFist = (lw && joints['left_index'] && joints['left_thumb'] && 
+                        dist(lw.x, lw.y, joints['left_index'].x, joints['left_index'].y) < fistThreshold);
+      let isRightFist = (rw && joints['right_index'] && joints['right_thumb'] && 
+                         dist(rw.x, rw.y, joints['right_index'].x, joints['right_index'].y) < fistThreshold);
+
+      // 優先序：右手握拳則使用右餐盤，否則檢查左手
+      if (isRightFist) {
+        activeHand = 'right';
+        handRX = offX + videoW - (rw.x / 640 * videoW);
+        handRY = offY + (rw.y / 480 * videoH);
+      } else if (isLeftFist) {
+        activeHand = 'left';
+        handLX = offX + videoW - (lw.x / 640 * videoW);
+        handLY = offY + (lw.y / 480 * videoH);
+      } else {
+        activeHand = null;
+      }
+
+      if (activeHand === null) return; // 沒握拳就不進行碰撞判定
+
+      let px = (activeHand === 'right') ? handRX : handLX;
+      let py = (activeHand === 'right') ? handRY : handLY;
+
+      // 檢查物品碰撞
+      for (let i = level3Items.length - 1; i >= 0; i--) {
+        let item = level3Items[i];
+        if (dist(px, py, item.x, item.y) < 75) {
+          // 捕獲物體
+          if (item.type === 'VEGGIE') level3Veg++;
+          else if (item.type === 'RICE') level3Rice++;
+          else if (item.type === 'MEAT') level3Meat++;
+          else if (item.type === 'JUNK') level3Timer = max(0, level3Timer - 5);
+          
+          level3Items.splice(i, 1); // 移除被捕獲的物體
+          checkLevel3Win();
+        }
+      }
     }
 
     // ----------------------------------------------------
@@ -156,9 +234,46 @@ function handleGestures() {
 
       if (nose.y < baseNoseY + 30 && hasSquatted) {
         squatCounter++; hasSquatted = false;
-        if (squatCounter >= targetSquats) { gameState = "END"; } // 深蹲完成直接進終點結語畫面
+        if (squatCounter >= targetSquats) { gameState = "LEVEL3_INTRO"; } // 第二關完成進入第三關介紹
       }
     }
+  }
+}
+
+/**
+ * 處理第三關物品掉落
+ */
+function updateLevel3Items(vx, vy, vw, vh) {
+  if (frameCount % spawnRate === 0) {
+    let types = [
+      {t:'RICE', e:'🍚'}, {t:'MEAT', e:'🍗'}, {t:'VEGGIE', e:'🥦'}, 
+      {t:'FRUIT', e:'🍎'}, {t:'MILK', e:'🥛'}, {t:'JUNK', e:'🍩'}, {t:'JUNK', e:'🍟'}
+    ];
+    let choice = random(types);
+    level3Items.push({
+      x: random(vx + 50, vx + vw - 50),
+      y: vy - 20,
+      type: choice.t,
+      emoji: choice.e,
+      speed: random(3, 6)
+    });
+  }
+
+  for (let i = level3Items.length - 1; i >= 0; i--) {
+    level3Items[i].y += level3Items[i].speed;
+    // 繪製物體
+    textSize(40);
+    text(level3Items[i].emoji, level3Items[i].x, level3Items[i].y + 15); // 偏移一點讓它落在盤子中央
+    // 移除掉出螢幕的
+    if (level3Items[i].y > vy + vh) {
+      level3Items.splice(i, 1);
+    }
+  }
+}
+
+function checkLevel3Win() {
+  if (level3Veg >= 2 && level3Rice >= 2 && level3Meat >= 1) {
+    gameState = "END";
   }
 }
 
@@ -197,13 +312,36 @@ function drawGameUI(vx, vy, vw, vh) {
     text("小小營養師", width / 2, height / 2 - 80);
     textSize(45); fill(255); text("健康餐盤大作戰", width / 2, height / 2);
     noStroke(); fill(200); textSize(24); text("點擊螢幕或雙手合十開啟冒險", width / 2, height / 2 + 100);
+  
+  } else if (gameState === "SUMMARY") {
+    // --- 第一關總結表畫面 ---
+    fill(0, 0, 0, 215); rect(0, 0, width, height);
+    let boxW = width * 0.6; let boxH = height * 0.6;
+    let boxX = width / 2 - boxW / 2; let boxY = height / 2 - boxH / 2 - 40;
+    stroke(0); strokeWeight(2); fill(255, 245, 200); rect(boxX, boxY, boxW, boxH, 15);
+    
+    stroke(0); strokeWeight(4); fill(100, 50, 0); textSize(36);
+    text("🍎 六大類食物大總結 🍎", width / 2, boxY + 50);
+    
+    noStroke(); fill(80, 40, 0); textSize(22); textAlign(LEFT, TOP);
+    let infoText = "1. 全穀雜糧類：提供能量 (如：米飯、吐司)\n" +
+                   "2. 豆魚蛋肉類：生長發育 (如：雞肉、雞蛋)\n" +
+                   "3. 蔬菜類：膳食纖維 (如：青江菜、高麗菜)\n" +
+                   "4. 水果類：維生素 (如：蘋果、香蕉)\n" +
+                   "5. 乳品類：豐富鈣質 (如：牛奶、優格)\n" +
+                   "6. 油脂堅果類：健康油脂 (如：花生、腰果)\n\n" +
+                   "💡 記得每天都要均衡攝取這六大類食物喔！";
+    text(infoText, boxX + 50, boxY + 110, boxW - 100, boxH - 120);
 
+    textAlign(CENTER, CENTER); stroke(0); strokeWeight(2); fill(0, 150, 255); textSize(24);
+    text("🙏 雙手合十（手腕靠攏）進入第二關", width / 2, boxY + boxH + 60);
+    
   } else if (gameState === "INTRO") {
     fill(0, 0, 0, 190); rect(0, 0, width, height);
     stroke(0); strokeWeight(6); fill(255, 215, 0); textSize(40);
     text("第一關：食物分類大挑戰", width / 2, height / 2 - 100);
     noStroke(); fill(255); textSize(24);
-    text("在這關，你將挑戰辨識「六大類食物」。\n\n❤️ 挑戰規則：你有 3 顆生命愛心，答錯一題扣一顆。\n愛心若全部扣完，就要從第一題重新開始喔！\n\n請依照下方的指引做出手勢：\n正確：舉起右手 | 錯誤：舉起左手\n\n點擊螢幕 或 雙手合十 開始作答！", width / 2, height / 2 + 60);
+    text("在這關，你將挑戰辨識「六大類食物」。\n\n❤️ 挑戰規則：你有 3 顆生命愛心，答錯一題扣一顆。\n愛心若全部扣完，就要從第一題重新開始喔！\n\n請依照下方的指引做出手勢：\n正確：✊ 握緊拳頭  |  錯誤：🙅 雙手交叉\n\n點擊螢幕 或 雙手合十 開始作答！", width / 2, height / 2 + 60);
 
   } else if (gameState === "PLAYING") {
     fill(0, 0, 0, 160); noStroke(); rect(vx, vy, vw, 90, 8);
@@ -225,7 +363,39 @@ function drawGameUI(vx, vy, vw, vh) {
     noStroke(); fill(255, 215, 0); textSize(26); text("💡 六大類食物知識補給站", vx + vw/2, vy + vh/2 - 20);
     fill(240); textSize(22); text(questions[currentQ].info, vx + vw/2, vy + vh/2 + 40);
     fill(173, 216, 230); textSize(20); stroke(0); strokeWeight(2); text("🙏 雙手合十進入下一題 ➡️", vx + vw/2, vy + vh - 40);
+
+  } else if (gameState === "LEVEL3_INTRO") {
+    fill(0, 0, 0, 200); rect(0, 0, width, height);
+    stroke(0); strokeWeight(6); fill(0, 255, 150); textSize(40);
+    text("第三關：均衡晚餐大捕手", width / 2, height / 2 - 120);
+    noStroke(); fill(255); textSize(24);
+    text("最後一關！請用你的雙手去「接住」掉落的食材。\n你需要調配出一份完美的均衡晚餐：\n\n✅ 目標：2 份蔬菜 🥦 + 2 份米飯 🍚 + 1 份肉類 🍗\n⚠️ 警告：接到垃圾食物 🍟 會扣掉 5 秒鐘！\n\n點擊螢幕 或 雙手合十 開始一分鐘挑戰！", width / 2, height / 2 + 60);
+
+  } else if (gameState === "LEVEL3_PLAYING") {
+    // 頂部進度條與計時
+    fill(0, 0, 0, 160); noStroke(); rect(vx, vy, vw, 80, 8);
+    stroke(0); strokeWeight(2); fill(255); textSize(22);
+    text(`⏰ 剩餘時間: ${level3Timer}秒`, vx + 100, vy + 40);
     
+    // 顯示目標清單
+    textAlign(LEFT, CENTER);
+    fill(255, 215, 0); text(`🍚 飯: ${level3Rice}/2`, vx + vw - 350, vy + 40);
+    fill(100, 255, 100); text(`🥦 菜: ${level3Veg}/2`, vx + vw - 240, vy + 40);
+    fill(255, 100, 100); text(`🍗 肉: ${level3Meat}/1`, vx + vw - 130, vy + 40);
+    textAlign(CENTER, CENTER);
+
+    // --- 在玩家握拳的手上繪製唯一的餐盤 ---
+    if (activeHand === 'right') drawPlate(handRX, handRY);
+    else if (activeHand === 'left') drawPlate(handLX, handLY);
+
+    // 更新與繪製掉落食材
+    updateLevel3Items(vx, vy, vw, vh);
+
+    if (millis() - lastTimeCheck >= 1000) {
+      level3Timer--; lastTimeCheck = millis();
+      if (level3Timer <= 0) { gameState = "LEVEL3_INTRO"; } // 時間到未完成，重來
+    }
+
   } else if (gameState === "INTRO2") {
     fill(0, 0, 0, 210); rect(0, 0, width, height);
     stroke(0); strokeWeight(6); fill(255, 100, 100); textSize(42);
@@ -266,22 +436,25 @@ function drawGameUI(vx, vy, vw, vh) {
     text(`第一關食物分類：獲得 ${score} / ${questions.length} 分`, width/2, height/2 - 130);
     fill(100, 255, 100);
     text(`第二關燃脂挑戰：完成 5 次深蹲，成功擊退熱量怪獸！`, width/2, height/2 - 90);
+    fill(0, 255, 200);
+    text(`第三關餐盤挑戰：成功調配出最均衡的晚餐！`, width/2, height/2 - 50);
     
     // --- 【核心精華結語】知識點總結 ---
     let boxW = width * 0.6;
     let boxH = height * 0.45;
     let boxX = width / 2 - boxW / 2;
-    let boxY = height / 2 - 60;
+    let boxY = height / 2 - 20;
 
     stroke(0); strokeWeight(1); fill(255, 235, 180); 
     rect(boxX, boxY, boxW, boxH, 15);
     
     textAlign(CENTER, TOP); noStroke(); fill(80, 50, 10); textSize(24);
-    let summaryText = "💡 【營養師的黃金健康密碼】 💡\n\n" +
-                      "恭喜你完成了所有訓練！這堂課我們學到了兩個重要的健康真理：\n" +
-                      "1. 聰明選：均衡攝取「六大類食物」，讓身體獲得完整的燃料。\n" +
-                      "2. 少紅燈：吃下一杯 700 大卡的珍珠奶茶，需要連續深蹲 400 下才能消耗！\n\n" +
-                      "在生活中多選天然原型食物，少喝含糖飲料，你就是最棒的健康推手！";
+    let summaryText = "💡 【小小營養師的黃金密碼】 💡\n\n" +
+                      "恭喜結業！你學會了：\n" +
+                      "1. 均衡餐盤：每餐應包含全穀、蛋白質與充足蔬菜。\n" +
+                      "2. 代價體感：一杯珍奶的熱量，需要運動非常久才能抵銷。\n" +
+                      "3. 聰明過生活：選擇天然原型食材，遠離加工垃圾食物。\n\n" +
+                      "你已經準備好成為家裡的健康小尖兵了！";
     
     // 將文字繪製在方塊內，並預留左右 40px, 上下 30px 的內距
     text(summaryText, boxX + 40, boxY + 30, boxW - 80, boxH - 40);
@@ -301,22 +474,20 @@ function keyPressed() {
 }
 
 function checkAnswer(userAnswer) {
-  if (userAnswer === questions[currentQ].a) { score++; feedbackMsg = "正確！"; } 
-  else { lives--; feedbackMsg = "錯誤！"; }
+  if (userAnswer === questions[currentQ].a) {
+    score++; feedbackMsg = "正確！";
+  } else {
+    lives--; feedbackMsg = "錯誤！";
+  }
   gameState = "FEEDBACK";
 }
 
 function nextQuestion() {
-  if (lives <= 0) {
-    // 愛心歸零，重頭開始
-    currentQ = 0;
-    score = 0;
-    lives = 3;
-    gameState = "INTRO";
-  } else {
+  if (lives <= 0) { currentQ = 0; score = 0; lives = 3; gameState = "INTRO"; } 
+  else {
     currentQ++;
     if (currentQ < questions.length) { gameState = "PLAYING"; } 
-    else { gameState = "INTRO2"; } // 第一關做完進第二關
+    else { gameState = "SUMMARY"; } 
   }
 }
 
@@ -326,9 +497,37 @@ function prevQuestion() {
 
 function mousePressed() {
   if (gameState === "COVER") { gameState = "INTRO"; } 
-  else if (gameState === "INTRO") { gameState = "PLAYING"; } 
-  else if (gameState === "INTRO2") { gameState = "CALIBRATE"; calibrationTimer = 120; } 
-  else if (gameState === "END") { currentQ = 0; score = 0; squatCounter = 0; gameState = "PLAYING"; }
+  else if (gameState === "INTRO") { gameState = "PLAYING"; }
+  else if (gameState === "SUMMARY") { gameState = "INTRO2"; }
+  else if (gameState === "INTRO2") { gameState = "CALIBRATE"; calibrationTimer = 120; }
+  else if (gameState === "LEVEL3_INTRO") { 
+    gameState = "LEVEL3_PLAYING"; level3Timer = 60; lastTimeCheck = millis(); 
+    level3Rice = level3Veg = level3Meat = 0; level3Items = [];
+  }
+  else if (gameState === "END") { currentQ = 0; score = 0; lives = 3; gameState = "COVER"; }
+}
+
+/**
+ * 在指定位置繪製一個可愛的餐盤
+ */
+function drawPlate(px, py) {
+  push();
+  // 餐盤陰影
+  noStroke();
+  fill(0, 0, 0, 50);
+  ellipse(px, py + 5, 110, 40);
+  
+  // 盤子主體 (瓷白色)
+  stroke(200);
+  strokeWeight(2);
+  fill(255);
+  ellipse(px, py, 100, 30);
+  
+  // 內圈裝飾線
+  noFill();
+  stroke(230);
+  ellipse(px, py, 70, 20);
+  pop();
 }
 
 function drawSpatula() {
